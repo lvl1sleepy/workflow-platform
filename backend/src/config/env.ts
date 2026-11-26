@@ -1,32 +1,64 @@
 import "dotenv/config";
 
-const allowedEnvs = ["development", "test", "production"];
+type NodeEnv = "development" | "test" | "production";
 
-const environment = process.env.NODE_ENV ?? "development";
-const port = Number(process.env.PORT ?? 3000);
-const url = process.env.DATABASE_URL;
-const dbMax = Number(process.env.DB_POOL_MAX ?? 10);
+function parseInteger(
+  name: string,
+  value: string | undefined,
+  defaultValue: number,
+  min: number,
+  max: number = Number.MAX_SAFE_INTEGER,
+): number {
+  const parsed = value === undefined ? defaultValue : Number(value);
 
-if (!url) {
-  throw new Error("DATABASE_URL environment variable is required");
+  if (!Number.isSafeInteger(parsed) || parsed < min || parsed > max) {
+    throw new Error(`${name} must be an integer between ${min} and ${max}`);
+  }
+
+  return parsed;
 }
 
-if (!environment || !allowedEnvs.includes(environment)) {
-  throw new Error("ENV must be one of: development, test, production");
+function parseNodeEnv(value: string): NodeEnv {
+  if (value !== "development" && value !== "test" && value !== "production") {
+    throw new Error("NODE_ENV must be one of: development, test, production");
+  }
+
+  return value;
 }
 
-if (port < 1 || port > 65535) {
-  throw new Error("PORT should be between 1 and 65535");
+function parseDatabaseUrl(value: string | undefined): string {
+  if (!value?.trim()) {
+    throw new Error("DATABASE_URL is required");
+  }
+
+  let parsed: URL;
+
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error("DATABASE_URL must be a valid URL");
+  }
+
+  if (parsed.protocol !== "postgresql:" && parsed.protocol !== "postgres:") {
+    throw new Error("DATABASE_URL must use a PostgreSQL protocol");
+  }
+
+  if (!parsed.hostname || parsed.pathname.length <= 1) {
+    throw new Error("DATABASE_URL must contain a hostname and database name");
+  }
+
+  return value;
 }
 
-if (dbMax < 1) {
-  throw new Error("DB_POOL_MAX should be a positive integer");
-}
+export const NODE_ENV = parseNodeEnv(process.env.NODE_ENV ?? "development");
 
-export const NODE_ENV = environment;
+export const PORT = parseInteger("PORT", process.env.PORT, 3000, 1, 65535);
 
-export const PORT = port;
+export const DATABASE_URL = parseDatabaseUrl(process.env.DATABASE_URL);
 
-export const DATABASE_URL = url;
-
-export const DB_POOL_MAX = dbMax;
+export const DB_POOL_MAX = parseInteger(
+  "DB_POOL_MAX",
+  process.env.DB_POOL_MAX,
+  10,
+  1,
+);
